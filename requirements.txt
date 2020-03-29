@@ -5,3 +5,4 @@ h5py==2.10.0
 torch
 git+https://repo.ijs.si/DIS-AGENTS/reldi-tagger@0.2.2
 git+https://repo.ijs.si/DIS-AGENTS/reldi-tokeniser@0.1.2
+git+https://github.com/python-excel/xlrd@1.2.0
