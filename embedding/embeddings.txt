@@ -1,1 +1,0 @@
-Put your magnitude embeddings into this folder
