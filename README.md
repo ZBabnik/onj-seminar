@@ -1,5 +1,10 @@
 # onj-seminar Text classification
 
+## Report location
+
+Report preview for the first submission is in the main folder 
+with the name report_preview.pdf
+
 ## Set up 
 
 file requirements.txt holds all packages.
