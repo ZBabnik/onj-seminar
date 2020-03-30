@@ -20,7 +20,7 @@ if __name__ == "__main__":
         tagger = Tagger()
         # remove all non alphanumeric characters
         no_non_alphanumeric_chars = map(lambda t: sub(r'[^a-zA-Z0-9]+', ' ', str(t)), messages)
-        # if a letter is repeated 3 times its most likely to emphisize the text so its shortened to 1 repetition
+        # if a letter is repeated 3 times its most likely to emphasize the text so its shortened to 1 repetition
         no_triple_chars = map(lambda t: sub(r'(\w)\1\1*', r'\1', str(t)), no_non_alphanumeric_chars)
         # get lemmas change all lemmas to lower case
         lemmas = map(lambda t: list(map(lambda u: u.lower(), tagger.lemmatiser(t, tagging=True)[1])), no_triple_chars)
