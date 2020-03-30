@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     if not path.exists("pickle/elmoWV.pkl") or not use_pickled_data:
         wv_embeddings = Magnitude("embeddings/slovenian-elmo.weights.magnitude")
-        word_vec = list(map(lambda t: list(wv_embeddings.query(t)), lemmas))
+        word_vec = list(map(lambda t: wv_embeddings.query(t), lemmas))
         if use_pickled_data:
             pickle.dump(word_vec, open("pickle/elmoWV.pkl", "wb"))
     if use_pickled_data:
