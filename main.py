@@ -8,6 +8,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 import numpy as np
+from sklearn.feature_extraction.text import CountVectorizer
 
 
 use_pickled_data = True
@@ -19,8 +20,9 @@ except:
 
 class Lemmatize:
 
-    def __init__(self, lemmatizer):
+    def __init__(self, lemmatizer, ret_str=False):
         self.lemmatizer = lemmatizer
+        self.ret_str = ret_str
 
     def fit(self, X, y=None, **kwargs):
         return self
@@ -39,6 +41,8 @@ class Lemmatize:
                 pickle.dump(lemmas, open("pickle/lemmas.pkl", "wb"))
         if use_pickled_data:
             lemmas = pickle.load(open("pickle/lemmas.pkl", "rb"))
+        if self.ret_str:
+            return list(map(lambda t: " ".join(t), lemmas))
         return lemmas
 
 
@@ -76,23 +80,31 @@ class Word2vecElmo:
 if __name__ == "__main__":
     xls = ReadXls("data/AllDiscussionData.xls")
     messages = xls.get_column_with_name("Message")
-    messages_gt = xls.get_column_with_name("Type")  # ground truth
+    messages_gt = list(filter(lambda t: t, xls.get_column_with_name("Category")))  # ground truth
 
     X_train, X_test, y_train, y_test = train_test_split(messages, messages_gt, test_size=0.2, random_state=0)
 
-    pipelane_lr1 = Pipeline([('scalar1', Lemmatize(Tagger())),
+    pipelane_lr1 = Pipeline([('scalar1', Lemmatize(Tagger(), ret_str=True)),
+                             ('BOW', CountVectorizer()),
+                             ('classify', LogisticRegression(random_state=0))])
+
+    pipelane_lr2 = Pipeline([('scalar1', Lemmatize(Tagger())),
                              ('word2vecW', Word2vecWiki()),
                              ('classify', LogisticRegression(random_state=0))])
 
-    pipelane_lr2 = Pipeline([('scalar2', Lemmatize(Tagger())),
+    pipelane_lr3 = Pipeline([('scalar2', Lemmatize(Tagger())),
                              ('word2vecE', Word2vecElmo()),
                              ('classify', LogisticRegression(random_state=0))])
 
-    pipelanes = [pipelane_lr1, pipelane_lr2]
-    pipelanes_dict = ["word2vecWiki", "word2vecElmo"]
+    pipelanes = [pipelane_lr1, pipelane_lr2, pipelane_lr3]
+    pipelanes_dict = ["BOW", "word2vecWiki", "word2vecElmo"]
 
     for pipelane in pipelanes:
         pipelane.fit(X_train, y_train)
 
     for i, model in enumerate(pipelanes):
-        print("{} Test Accuracy: {}".format(pipelanes_dict[i], model.score(X_test, y_test)))
+        scr = 0
+        for a,b in zip(y_test, model.predict(X_test)):
+            if a == b:
+                scr += 1
+        print("{} Test Accuracy: {}".format(pipelanes_dict[i], scr/len(y_test)))
