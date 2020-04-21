@@ -1,5 +1,6 @@
 from readXls import ReadXls
 from tagger import Tagger
+from tokeniser import tokeniser
 from pymagnitude import Magnitude
 import _pickle as pickle
 from os import path, mkdir
@@ -20,9 +21,8 @@ except:
 
 class Lemmatize:
 
-    def __init__(self, lemmatizer, ret_str=False):
+    def __init__(self, lemmatizer):
         self.lemmatizer = lemmatizer
-        self.ret_str = ret_str
 
     def fit(self, X, y=None, **kwargs):
         return self
@@ -41,9 +41,16 @@ class Lemmatize:
                 pickle.dump(lemmas, open("pickle/lemmas.pkl", "wb"))
         if use_pickled_data:
             lemmas = pickle.load(open("pickle/lemmas.pkl", "rb"))
-        if self.ret_str:
-            return list(map(lambda t: " ".join(t), lemmas))
         return lemmas
+
+
+class ToStr:
+
+    def fit(self, X, y=None, **kwargs):
+        return self
+
+    def transform(self, X, y=None, *args, **kwargs):
+        return list(map(str, X))
 
 
 class Word2vecWiki:
@@ -82,9 +89,9 @@ if __name__ == "__main__":
     messages = xls.get_column_with_name("Message")
     messages_gt = list(filter(lambda t: t, xls.get_column_with_name("Category")))  # ground truth
 
-    X_train, X_test, y_train, y_test = train_test_split(messages, messages_gt, test_size=0.2, random_state=0)
+    X_train, X_test, y_train, y_test = train_test_split(messages, messages_gt, test_size=0.3, random_state=0)
 
-    pipelane_lr1 = Pipeline([('scalar1', Lemmatize(Tagger(), ret_str=True)),
+    pipelane_lr1 = Pipeline([('str', ToStr()),
                              ('BOW', CountVectorizer()),
                              ('classify', LogisticRegression(random_state=0))])
 
