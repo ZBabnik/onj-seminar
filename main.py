@@ -2,15 +2,12 @@ from readXls import ReadXls
 from tagger import Tagger
 from tokeniser import tokeniser
 from pymagnitude import Magnitude
-import _pickle as pickle
-from os import path, mkdir
 from re import sub
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.metrics import f1_score
 
 
 class Lemmatize:
@@ -27,7 +24,7 @@ class Lemmatize:
         # if a letter is repeated 3 times its most likely to emphasize the text so its shortened to 1 repetition
         no_triple_chars = map(lambda t: sub(r'(\w)\1\1*', r'\1', str(t)), no_non_alphanumeric_chars)
         # get lemmas change all lemmas to lower case
-        lemmas = map(lambda t: list(map(lambda u: u.lower(), self.lemmatizer.lemmatiser(t, tagging=True)[1])), no_triple_chars)
+        lemmas = map(lambda t: list(map(lambda u: u.lower(), tokeniser(t))), no_triple_chars)
         # if lemmas are empty mark it with _
         lemmas = list(map(lambda t: ['_'] if (not t) else t, lemmas))
         return lemmas
@@ -71,7 +68,7 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = train_test_split(messages, messages_gt, test_size=0.3, random_state=0)
 
     pipelane_lr1 = Pipeline([('str', ToStr()),
-                             ('BOW', CountVectorizer()),
+                             ('BOW', CountVectorizer(ngram_range=(1,2))),
                              ('classify', LogisticRegression(random_state=0))])
 
     pipelane_lr2 = Pipeline([('scalar1', Lemmatize(Tagger())),
