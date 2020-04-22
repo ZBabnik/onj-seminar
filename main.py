@@ -79,27 +79,46 @@ class GetRelevance:
         return np.append(X.toarray(), tmp.reshape(-1,1), axis=1)
 
 
+class GetType:
+    def __init__(self, pipe, train_y):
+        self.pipe = pipe
+        self.train_y = train_y
+
+    def fit(self, X, y=None, **kwargs):
+        self.pipe.fit(X, self.train_y)
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        tmp = np.array(list(map(lambda t: 0 if (t == "A") else 2 if (t == "Q") else 1, self.pipe.predict(X))), dtype=float)
+        return np.append(X, tmp.reshape(-1,1), axis=1)
+
+
 if __name__ == "__main__":
     xls = ReadXls("data/AllDiscussionData.xls")
     messages = np.array(xls.get_column_with_name("Message"))
     relevance = np.array(list(filter(lambda t: t, xls.get_column_with_name("Book relevance"))))  # ground truth
+    type = np.array(list(filter(lambda t: t, xls.get_column_with_name("Type"))))  # ground truth
     messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))
 
-    X_train, X_test, y_train, y_test, rel_train, rel_test= train_test_split(messages, messages_gt, relevance, test_size=0.3, random_state=0)
+    X_train, X_test, y_train, y_test, rel_train, rel_test, type_train, type_test\
+        = train_test_split(messages, messages_gt, relevance, type, test_size=0.3, random_state=0)
 
     pipeline_lr1 = Pipeline([('str', ToStr()),
                              ('BOW', CountVectorizer(ngram_range=(1,2))),
                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0), train_y=rel_train)),
+                             ('type', GetType(pipe=LogisticRegression(random_state=0), train_y=type_train)),
                              ('classify', LogisticRegression(random_state=0))])
 
     pipeline_lr2 = Pipeline([('scalar1', Lemmatize(Tagger())),
                              ('word2vecW', Word2vecWiki()),
                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0), train_y=rel_train)),
+                             ('type', GetType(pipe=LogisticRegression(random_state=0), train_y=type_train)),
                              ('classify', LogisticRegression(random_state=0))])
 
     pipeline_lr3 = Pipeline([('scalar2', Lemmatize(Tagger())),
                              ('word2vecE', Word2vecElmo()),
                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0), train_y=rel_train)),
+                             ('type', GetType(pipe=LogisticRegression(random_state=0), train_y=type_train)),
                              ('classify', LogisticRegression(random_state=0))])
 
     pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
