@@ -74,9 +74,10 @@ class GetRelevance:
 
     def transform(self, X, y=None, **kwargs):
         tmp = np.array(list(map(lambda t: 1 if (t == "Yes") else 0, self.pipe.predict(X))), dtype=float)
-        if isinstance(X, list):
+        try:
             return np.append(X, tmp.reshape(-1, 1), axis=1)
-        return np.append(X.toarray(), tmp.reshape(-1,1), axis=1)
+        except:
+            return np.append(X.toarray(), tmp.reshape(-1,1), axis=1)
 
 
 class GetType:
@@ -90,7 +91,10 @@ class GetType:
 
     def transform(self, X, y=None, **kwargs):
         tmp = np.array(list(map(lambda t: 0 if (t == "A") else 2 if (t == "Q") else 1, self.pipe.predict(X))), dtype=float)
-        return np.append(X, tmp.reshape(-1,1), axis=1)
+        try:
+            return np.append(X, tmp.reshape(-1, 1), axis=1)
+        except:
+            return np.append(X.toarray(), tmp.reshape(-1,1), axis=1)
 
 
 if __name__ == "__main__":
