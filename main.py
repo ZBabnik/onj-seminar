@@ -5,9 +5,12 @@ from pymagnitude import Magnitude
 from re import sub
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, FeatureUnion
 import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.svm import SVC
+from sklearn.neural_network import MLPClassifier
+from sklearn.base import TransformerMixin, BaseEstimator
 
 
 class Lemmatize:
@@ -60,28 +63,48 @@ class Word2vecElmo:
         return word_vec
 
 
+class GetRelevance:
+    def __init__(self, pipe, train_y):
+        self.pipe = pipe
+        self.train_y = train_y
+
+    def fit(self, X, y=None, **kwargs):
+        self.pipe.fit(X, self.train_y)
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        tmp = np.array(list(map(lambda t: 1 if (t == "Yes") else 0, self.pipe.predict(X))), dtype=float)
+        if isinstance(X, list):
+            return np.append(X, tmp.reshape(-1, 1), axis=1)
+        return np.append(X.toarray(), tmp.reshape(-1,1), axis=1)
+
+
 if __name__ == "__main__":
     xls = ReadXls("data/AllDiscussionData.xls")
-    messages = xls.get_column_with_name("Message")
-    messages_gt = list(filter(lambda t: t, xls.get_column_with_name("Category")))  # ground truth
+    messages = np.array(xls.get_column_with_name("Message"))
+    relevance = np.array(list(filter(lambda t: t, xls.get_column_with_name("Book relevance"))))  # ground truth
+    messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))
 
-    X_train, X_test, y_train, y_test = train_test_split(messages, messages_gt, test_size=0.3, random_state=0)
+    X_train, X_test, y_train, y_test, rel_train, rel_test= train_test_split(messages, messages_gt, relevance, test_size=0.3, random_state=0)
 
-    pipelane_lr1 = Pipeline([('str', ToStr()),
+    pipeline_lr1 = Pipeline([('str', ToStr()),
                              ('BOW', CountVectorizer(ngram_range=(1,2))),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0), train_y=rel_train)),
                              ('classify', LogisticRegression(random_state=0))])
 
-    pipelane_lr2 = Pipeline([('scalar1', Lemmatize(Tagger())),
+    pipeline_lr2 = Pipeline([('scalar1', Lemmatize(Tagger())),
                              ('word2vecW', Word2vecWiki()),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0), train_y=rel_train)),
                              ('classify', LogisticRegression(random_state=0))])
 
-    pipelane_lr3 = Pipeline([('scalar2', Lemmatize(Tagger())),
+    pipeline_lr3 = Pipeline([('scalar2', Lemmatize(Tagger())),
                              ('word2vecE', Word2vecElmo()),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0), train_y=rel_train)),
                              ('classify', LogisticRegression(random_state=0))])
 
-    pipelanes = [pipelane_lr1, pipelane_lr2, pipelane_lr3]
-    pipelanes_dict = ["BOW", "word2vecWiki", "word2vecElmo"]
+    pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
+    pipelines_dict = ["BOW", "word2vecWiki", "word2vecElmo"]
 
-    for i, pipelane in enumerate(pipelanes):
+    for i, pipelane in enumerate(pipelines):
         pipelane.fit(X_train, y_train)
-        print("{} Test Accuracy: {}".format(pipelanes_dict[i], pipelane.score(X_test, y_test)))
+        print("{} Test Accuracy: {}".format(pipelines_dict[i], pipelane.score(X_test, y_test)))
