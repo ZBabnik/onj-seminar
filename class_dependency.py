@@ -9,7 +9,7 @@ from readXls import ReadXls
 def make_value_dict(data):
 
     value_dict = dict()
-    for i, item in enumerate(set(data)):
+    for i, item in enumerate(sorted(set(data))):
         value_dict[item] = i
 
     return value_dict
@@ -35,7 +35,6 @@ def plot_posterior(data, labels1, labels2, name):
     fig, ax = plt.subplots()
 
     for i in range(len(data)):
-        print(data[i])
         ax.plot(x, data[i], label=labels1[i], marker="o")
 
     ax.set_xticks(x)
@@ -82,7 +81,7 @@ if __name__ == "__main__":
     ctg_brd = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
 
     #compare_distributions(relevance, ctg_brd, "Relevance", "CategoryBroad")
-    #compare_distributions(relevance, messages_gt, "Relevance", "Category")
+    compare_distributions(relevance, messages_gt, "Relevance", "Category")
     #compare_distributions(type, ctg_brd, "Type", "CategoryBroad")
-    #compare_distributions(type, messages_gt, "Type", "Category")
+    compare_distributions(type, messages_gt, "Type", "Category")
     compare_distributions(join_data(relevance, type), messages_gt, "Relevance+Type", "Category")
