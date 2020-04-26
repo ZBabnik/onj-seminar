@@ -81,6 +81,7 @@ class WordEmbeddings:
     """
     converts tokens to word vectors and sums them for each sentence
     tags and topic are converted into BOW format and appended to the end of the sum of token word vectors of message
+    topic is currently skiped because of worse scores
     """
     def __init__(self, model_path):
         self.model_path = model_path
@@ -95,8 +96,8 @@ class WordEmbeddings:
 
     def transform(self, X, y=None, **kwargs):
         word_vec = list(map(lambda t: np.sum(query(self.model_path, tuple(t)), axis=0), X[:,0]))
-        return np.append(np.append(word_vec, np.maximum(2,self.BOW.transform(X[:,1]).toarray()), axis=1),
-                         self.BOWtopic.transform(X[:, 2]).toarray(), axis=1)
+        return np.append(word_vec, np.maximum(2,self.BOW.transform(X[:,1]).toarray()), axis=1)
+                         # ,self.BOWtopic.transform(X[:, 2]).toarray(), axis=1) gives bad result
 
 
 class GetRelevance:
@@ -136,7 +137,7 @@ if __name__ == "__main__":
     # read the data
     xls = ReadXls("data/AllDiscussionData.xls")
     messages = np.array(xls.get_column_with_name("Message")).reshape(-1,1)
-    topic = np.array(list(map(lambda t: str(t).replace(" ", "")[::7], xls.get_column_with_name("Topic"
+    topic = np.array(list(map(lambda t: str(t).replace(" ", "")[::14], xls.get_column_with_name("Topic"
                                                                                           )))).reshape(-1,1)
     relevance = np.array(list(filter(lambda t: t, xls.get_column_with_name("Book relevance"))))  # ground truth
     type = np.array(list(filter(lambda t: t, xls.get_column_with_name("Type"))))  # ground truth
