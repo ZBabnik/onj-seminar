@@ -81,23 +81,22 @@ class WordEmbeddings:
     """
     converts tokens to word vectors and sums them for each sentence
     tags and topic are converted into BOW format and appended to the end of the sum of token word vectors of message
-    topic is currently skiped because of worse scores
     """
     def __init__(self, model_path):
         self.model_path = model_path
         self.BOWtopic = CountVectorizer(stop_words=None)
         self.BOW = CountVectorizer(stop_words=None, ngram_range=(1,2))
-        #self.BOW.fit(["aVm","aAp","aPq", "aZ", "aNc", "aRg"]) # if we wanted to search for specific tags
+        self.BOW.fit(["aVm","aAp","aPq", "aZ", "aNc", "aRg"]) # if we want to search only for specific tags
 
     def fit(self, X, y=None, **kwargs):
         self.BOWtopic.fit(X[:,2])
-        self.BOW.fit(X[:,1])
+        #self.BOW.fit(X[:,1])
         return self
 
     def transform(self, X, y=None, **kwargs):
         word_vec = list(map(lambda t: np.sum(query(self.model_path, tuple(t)), axis=0), X[:,0]))
-        return np.append(word_vec, np.maximum(2,self.BOW.transform(X[:,1]).toarray()), axis=1)
-                         # ,self.BOWtopic.transform(X[:, 2]).toarray(), axis=1) gives bad result
+        return np.append(np.append(word_vec, self.BOWtopic.transform(X[:, 2]).toarray(), axis=1)
+                          ,np.maximum(1,self.BOW.transform(X[:,1]).toarray()), axis=1) # gives bad result
 
 
 class GetRelevance:
@@ -112,7 +111,7 @@ class GetRelevance:
         return self
 
     def transform(self, X, y=None, **kwargs):
-        tmp = np.array(list(map(lambda t: 1 if (t == "Yes") else 0, self.pipe.predict(X))), dtype=float)
+        tmp = np.array(list(map(lambda t: 1 if (t == "Yes") else -1, self.pipe.predict(X))), dtype=float)
         return np.append(X, tmp.reshape(-1, 1), axis=1)
 
 
@@ -129,7 +128,7 @@ class GetType:
         return self
 
     def transform(self, X, y=None, **kwargs):
-        tmp = np.array(list(map(lambda t: 0 if (t == "A") else 2 if (t == "Q") else 1, self.pipe.predict(X))), dtype=float)
+        tmp = np.array(list(map(lambda t: -1 if (t == "A") else 1 if (t == "Q") else 0, self.pipe.predict(X))), dtype=float)
         return np.append(X, tmp.reshape(-1, 1), axis=1)
 
 
@@ -137,7 +136,7 @@ if __name__ == "__main__":
     # read the data
     xls = ReadXls("data/AllDiscussionData.xls")
     messages = np.array(xls.get_column_with_name("Message")).reshape(-1,1)
-    topic = np.array(list(map(lambda t: str(t).replace(" ", "")[::14], xls.get_column_with_name("Topic"
+    topic = np.array(list(map(lambda t: str(t).replace(" ", "")[::11], xls.get_column_with_name("Topic"
                                                                                           )))).reshape(-1,1)
     relevance = np.array(list(filter(lambda t: t, xls.get_column_with_name("Book relevance"))))  # ground truth
     type = np.array(list(filter(lambda t: t, xls.get_column_with_name("Type"))))  # ground truth
@@ -163,14 +162,14 @@ if __name__ == "__main__":
     pipeline_lr1 = Pipeline([('str', ToStr()),
                              ('BOW', CountVectorizer(ngram_range=(1,2))),
                              ('toArray', ToArray()),
-                             # ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                             ('type', GetType(pipe=LogisticRegression(random_state=0))),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             #('type', GetType(pipe=LogisticRegression(random_state=0))),
                              ('classify', LogisticRegression(random_state=0))])
 
     pipeline_lr2 = Pipeline([('scalar1', Tagg(Tagger())),
                              ('word2vecW', WordEmbeddings("embeddings/wiki.sl.magnitude")),
-                             # ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                             ('type', GetType(pipe=LogisticRegression(random_state=0))),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             #('type', GetType(pipe=LogisticRegression(random_state=0))),
                              ('classify', LogisticRegression(random_state=0))])
 
     # params for gridsearchCV for elmo WV
@@ -183,13 +182,13 @@ if __name__ == "__main__":
     }
     pipeline_lr3 = Pipeline([('scalar2', Tagg(Tagger())),
                              ('word2vecW', WordEmbeddings("embeddings/slovenian-elmo.weights.magnitude")),
-                             # ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                             ('type', GetType(pipe=LogisticRegression(random_state=0))),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             #('type', GetType(pipe=LogisticRegression(random_state=0))),
                              ('classify', LogisticRegression(random_state=0))])
 
     pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
     pipelines_dict = ["BOW", "wiki", "elmo2"]
     # fit and predict
     for i, pipeline in enumerate(pipelines):
-        pipeline.fit(X_train, y_train, type__typ=type_train)
+        pipeline.fit(X_train, y_train,  relevance__rel=rel_train)
         print("{} Test Accuracy: {}".format(pipelines_dict[i], pipeline.score(X_test, y_test)))
