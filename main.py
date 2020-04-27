@@ -29,15 +29,27 @@ class Tagg:
     def fit(self, X, y=None, **kwargs):
         return self
 
+    def isQuestion(self, sentence):
+        for word in ["kdo", "kje", "kaj", "kdaj", "zakaj", "kako", "?", "ali"]:
+            if word in sentence:
+                return (word + " ") * 5 + sentence
+        # for word in sentence.split():
+          #  if len(word) > 15:
+           #     return "klnlcknlakncklankankasncsincsncklnskncknsaklsnklsnklsnklsnklskankslsanksn"
+        return sentence
+
     def transform(self, X, y=None, *args, **kwargs):
         # remove all non alphanumeric characters
         # no_non_alphanumeric_chars = map(lambda t: sub(r'[^a-zA-Z0-9]+', ' ', str(t)), X[:, 0])
         # if a letter is repeated 3 times its most likely to emphasize the text so its shortened to 1 repetition
         #no_triple_chars = map(lambda t: sub(r'(\w)\1\1*', r'\1', str(t)), X[:, 0])
         # get lemmas change all lemmas to lower case
+
+        weighted_questions = map(lambda t: self.isQuestion(t.lower()),  X[:, 0])
+
         tokens = np.array(list(map(lambda t: np.array([list(map(lambda u: u.lower(), tokeniser(str(t)))),
                                         " ".join(list(map(lambda u: "a"+u[:2], self.lemmatizer.tagger(str(t))[1])))]),
-                                   X[:, 0]))) # tokenise and add taggs
+                                   weighted_questions))) # tokenise and add taggs
         return np.append(tokens, X[:, 1].reshape(-1,1), axis=1)
 
 
@@ -86,7 +98,7 @@ class WordEmbeddings:
         self.model_path = model_path
         self.BOWtopic = CountVectorizer(stop_words=None)
         self.BOW = CountVectorizer(stop_words=None, ngram_range=(1,2))
-        self.BOW.fit(["aVm","aAp","aPq", "aZ", "aNc", "aRg"]) # if we want to search only for specific tags
+        self.BOW.fit(["aVm","aAp","aPq", "aZ", "aNc", "aRg"])  # if we want to search only for specific tags
 
     def fit(self, X, y=None, **kwargs):
         self.BOWtopic.fit(X[:,2])
