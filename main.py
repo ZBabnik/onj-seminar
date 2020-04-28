@@ -144,20 +144,63 @@ class GetType:
         return np.append(X, tmp.reshape(-1, 1), axis=1)
 
 
+class GetCategory:
+    """
+    predicts message Category and adds the value to the vector
+    """
+
+    def __init__(self, pipe):
+        self.pipe = pipe
+
+    def fit(self, X, y=None, **kwargs):
+        self.pipe.fit(X, kwargs["cat"])
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        tmp = np.array(list(map(lambda t: 0 if (t == "CG") else 1 if (t == "CB") else 2 if (t == "CE")
+            else 3 if (t == "CF") else 4 if (t == "CO") else 5 if (t == "CC")
+            else 6 if (t == "S") else 7 if (t == "DQ") else 8 if (t == "DE")
+            else 9 if (t == "DA") else 10 if (t == "DAA") else 11 if (t == "ME")
+            else 12 if (t == "MQ") else 13 if (t == "MA") else 14 if (t == "DAA")
+            else 15 if (t == "IQ") else 16 if (t == "IA") else 17 if (t == "IQA")
+            else 18, self.pipe.predict(X))), dtype=float)
+        return np.append(X, tmp.reshape(-1, 1), axis=1)
+
+
+class GetCategoryBroad:
+    """
+    predicts message CategoryBroad and adds the value to the vector
+    """
+
+    def __init__(self, pipe):
+        self.pipe = pipe
+
+    def fit(self, X, y=None, **kwargs):
+        self.pipe.fit(X, kwargs["ctb"])
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        tmp = np.array(list(map(lambda t: 0 if (t == "C") else 1 if (t == "O") else 2 if (t == "I")
+            else 3 if (t == "D") else 4, self.pipe.predict(X))), dtype=float)
+        return np.append(X, tmp.reshape(-1, 1), axis=1)
+
+
 if __name__ == "__main__":
     # read the data
     xls = ReadXls("data/AllDiscussionData.xls")
-    messages = np.array(xls.get_column_with_name("Message")).reshape(-1,1)
+    messages = np.array(xls.get_column_with_name("Message")).reshape(-1, 1)
     topic = np.array(list(map(lambda t: str(t).replace(" ", "")[::11], xls.get_column_with_name("Topic"
-                                                                                          )))).reshape(-1,1)
+                                                                                                )))).reshape(-1, 1)
     relevance = np.array(list(filter(lambda t: t, xls.get_column_with_name("Book relevance"))))  # ground truth
     type = np.array(list(filter(lambda t: t, xls.get_column_with_name("Type"))))  # ground truth
-    messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))
+    category = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))  # ground truth
+    category_broad = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
     X = np.append(messages, topic, axis=1)
 
     # split train / test
-    X_train, X_test, y_train, y_test, rel_train, rel_test, type_train, type_test\
-        = train_test_split(X, messages_gt, relevance, type, test_size=0.3, random_state=0)
+    X_train, X_test, category_train, category_test, relevance_train, relevance_test, type_train, type_test, \
+    category_broad_train, category_broad_test \
+        = train_test_split(X, category, relevance, type, category_broad, test_size=0.3, random_state=0)
 
     # params for gridsearchCV
     fit_params = {
@@ -202,5 +245,5 @@ if __name__ == "__main__":
     pipelines_dict = ["BOW", "wiki", "elmo2"]
     # fit and predict
     for i, pipeline in enumerate(pipelines):
-        pipeline.fit(X_train, y_train,  relevance__rel=rel_train)
-        print("{} Test Accuracy: {}".format(pipelines_dict[i], pipeline.score(X_test, y_test)))
+        pipeline.fit(X_train, category_train, relevance__rel=relevance_train)
+        print("{} Test Accuracy: {}".format(pipelines_dict[i], pipeline.score(X_test, relevance_test)))
