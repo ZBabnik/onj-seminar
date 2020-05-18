@@ -245,7 +245,7 @@ if __name__ == "__main__":
                              ('classify', LogisticRegression(random_state=0))])
 
     pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
-    pipelines_dict = ["BOW", "wiki", "elmo2"]
+    pipelines_dict = ["BOW", "wiki", "elmo"]
     # fit and predict
     for i, pipeline in enumerate(pipelines):
         pipeline.fit(X_train, category_train)
@@ -257,17 +257,19 @@ if __name__ == "__main__":
         precision = precision_score(category_test, pred, average=None, labels=labels, zero_division=1)
         recall = recall_score(category_test, pred, average=None, labels=labels, zero_division=1)
         pack = sorted(zip(f1, recall, precision, labels), reverse=True)
-        f1 = [i[0] for i in pack]
-        precision = [i[2] for i in pack]
-        recall = [i[1] for i in pack]
+        f1 = [i[0]*100 for i in pack]
+        precision = [i[2]*100 for i in pack]
+        recall = [i[1]*100 for i in pack]
         labels = [i[3] for i in pack]
         plt.plot(labels, f1, 'b-',label="F1")
         plt.plot(labels, precision, 'r-',
                  label="precision")
         plt.plot(labels, recall, 'g-',
                  label="recall")
+        plt.xticks(rotation=90)
         plt.title("{} F1, precision, recall".format(pipelines_dict[i]))
         plt.xlabel("labels")
+        plt.gcf().subplots_adjust(bottom=0.15)
         plt.ylabel("%")
         plt.legend()
         plt.show()
