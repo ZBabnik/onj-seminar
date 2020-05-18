@@ -206,8 +206,6 @@ if __name__ == "__main__":
     for i, pipeline in enumerate(pipelines):
         pipeline.fit(X_train, y_train)
         pred = pipeline.predict(X_test)
-        print(pred)
-        print(y_test)
         labels = list(set(y_test))
         print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(y_test, pred)))
 
