@@ -222,13 +222,13 @@ if __name__ == "__main__":
                              ('toArray', ToArray()),
                              #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', SVC())])
+                             ('classify', LogisticRegression(random_state=0))])
 
     pipeline_lr2 = Pipeline([('scalar1', Tagg(Tagger())),
                              ('word2vecW', WordEmbeddings("embeddings/wiki.sl.magnitude")),
                              #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', SVC())])
+                             ('classify', LogisticRegression(random_state=0))])
 
     # params for gridsearchCV for elmo WV
     fit_params = {
@@ -242,7 +242,7 @@ if __name__ == "__main__":
                              ('word2vecW', WordEmbeddings("embeddings/slovenian-elmo.weights.magnitude")),
                              #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', SVC())])
+                             ('classify', LogisticRegression(random_state=0))])
 
     pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
     pipelines_dict = ["BOW", "wiki", "elmo2"]
@@ -253,11 +253,18 @@ if __name__ == "__main__":
         labels = list(set(category_test))
         print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(category_test, pred)))
 
-        plt.plot(labels, f1_score(category_test, pred, average=None, labels=labels, zero_division=1), 'b-',
-                 label="F1")
-        plt.plot(labels, precision_score(category_test, pred, average=None, labels=labels, zero_division=1), 'r-',
+        f1 = f1_score(category_test, pred, average=None, labels=labels, zero_division=1)
+        precision = precision_score(category_test, pred, average=None, labels=labels, zero_division=1)
+        recall = recall_score(category_test, pred, average=None, labels=labels, zero_division=1)
+        pack = sorted(zip(f1, recall, precision, labels), reverse=True)
+        f1 = [i[0] for i in pack]
+        precision = [i[2] for i in pack]
+        recall = [i[1] for i in pack]
+        labels = [i[3] for i in pack]
+        plt.plot(labels, f1, 'b-',label="F1")
+        plt.plot(labels, precision, 'r-',
                  label="precision")
-        plt.plot(labels, recall_score(category_test, pred, average=None, labels=labels, zero_division=1), 'g-',
+        plt.plot(labels, recall, 'g-',
                  label="recall")
         plt.title("{} F1, precision, recall".format(pipelines_dict[i]))
         plt.xlabel("labels")
