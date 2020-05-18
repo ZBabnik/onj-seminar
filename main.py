@@ -2,6 +2,7 @@ from readXls import ReadXls
 from tagger import Tagger
 from tokeniser import tokeniser
 from pymagnitude import Magnitude
+import matplotlib.pyplot as plt
 from re import sub
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -13,6 +14,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import GridSearchCV
 from functools import lru_cache
 from sklearn.base import TransformerMixin, BaseEstimator
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 # preload all word vector models
 models = {"embeddings/wiki.sl.magnitude": Magnitude("embeddings/wiki.sl.magnitude"),
@@ -108,7 +110,7 @@ class WordEmbeddings:
     def transform(self, X, y=None, **kwargs):
         word_vec = list(map(lambda t: np.sum(query(self.model_path, tuple(t)), axis=0), X[:,0]))
         return np.append(np.append(word_vec, self.BOWtopic.transform(X[:, 2]).toarray(), axis=1)
-                          ,np.maximum(1,self.BOW.transform(X[:,1]).toarray()), axis=1) # gives bad result
+                          ,np.maximum(1,self.BOW.transform(X[:,1]).toarray()), axis=1)
 
 
 class GetRelevance:
@@ -152,7 +154,7 @@ if __name__ == "__main__":
                                                                                           )))).reshape(-1,1)
     relevance = np.array(list(filter(lambda t: t, xls.get_column_with_name("Book relevance"))))  # ground truth
     type = np.array(list(filter(lambda t: t, xls.get_column_with_name("Type"))))  # ground truth
-    messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))
+    messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
     X = np.append(messages, topic, axis=1)
 
     # split train / test
@@ -174,15 +176,15 @@ if __name__ == "__main__":
     pipeline_lr1 = Pipeline([('str', ToStr()),
                              ('BOW', CountVectorizer(ngram_range=(1,2))),
                              ('toArray', ToArray()),
-                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', LogisticRegression(random_state=0))])
+                             ('classify', SVC())])
 
     pipeline_lr2 = Pipeline([('scalar1', Tagg(Tagger())),
                              ('word2vecW', WordEmbeddings("embeddings/wiki.sl.magnitude")),
-                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', LogisticRegression(random_state=0))])
+                             ('classify', SVC())])
 
     # params for gridsearchCV for elmo WV
     fit_params = {
@@ -194,13 +196,29 @@ if __name__ == "__main__":
     }
     pipeline_lr3 = Pipeline([('scalar2', Tagg(Tagger())),
                              ('word2vecW', WordEmbeddings("embeddings/slovenian-elmo.weights.magnitude")),
-                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', LogisticRegression(random_state=0))])
+                             ('classify', SVC())])
 
     pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
     pipelines_dict = ["BOW", "wiki", "elmo2"]
     # fit and predict
     for i, pipeline in enumerate(pipelines):
-        pipeline.fit(X_train, y_train,  relevance__rel=rel_train)
-        print("{} Test Accuracy: {}".format(pipelines_dict[i], pipeline.score(X_test, y_test)))
+        pipeline.fit(X_train, y_train)
+        pred = pipeline.predict(X_test)
+        print(pred)
+        print(y_test)
+        labels = list(set(y_test))
+        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(y_test, pred)))
+
+        plt.plot(labels, f1_score(y_test, pred, average=None, labels=labels, zero_division=1), 'b-',
+                 label="F1")
+        plt.plot(labels, precision_score(y_test, pred, average=None, labels=labels, zero_division=1), 'r-',
+                 label="precision")
+        plt.plot(labels, recall_score(y_test, pred, average=None, labels=labels, zero_division=1), 'g-',
+                 label="recall")
+        plt.title("{} F1, precision, recall".format(pipelines_dict[i]))
+        plt.xlabel("labels")
+        plt.ylabel("%")
+        plt.legend()
+        plt.show()
