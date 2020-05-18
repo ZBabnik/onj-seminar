@@ -68,6 +68,6 @@ if __name__ == "__main__":
     messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))
     ctg_brd = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
 
-    category_wordcount(relevance, messages, "Relevance")
-    category_wordcount(type, messages, "Type")
+    #category_wordcount(relevance, messages, "Relevance")
+    #category_wordcount(type, messages, "Type")
     category_wordcount(ctg_brd, messages, "CategoryBroad")

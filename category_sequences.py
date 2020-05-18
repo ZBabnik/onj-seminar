@@ -1,24 +1,16 @@
-from collections import Counter
 
 import numpy as np
 import networkx as nx
-
-from readXls import ReadXls
-from class_dependency import make_value_dict, get_labels
-from tagger import Tagger
-from tokeniser import tokeniser
-
 import matplotlib.pyplot as plt
 
+from readXls import ReadXls
 
-def get_sequences(data, prev, labels):
 
-    #print(data)
+
+
+def get_sequences(data, prev):
 
     G = nx.DiGraph()
-
-    for val in set(labels):
-        G.add_node(val)
 
     all_seq = []
     for i in range(len(data)):
@@ -26,7 +18,12 @@ def get_sequences(data, prev, labels):
             for j in range(prev, len(data[i])):
                 all_seq.append(("+".join([data[i][j - (prev - k)] for k in range(prev)]), data[i][j]))
 
-    #print(all_seq)
+    #for x in all_seq:
+    #    print(x)
+
+    for start, end in all_seq:
+        G.add_node(start, nof_outedges=0)
+        G.add_node(end, nof_outedges=0)
 
     cummulative_weights = 0
     for start, end in all_seq:
@@ -36,23 +33,19 @@ def get_sequences(data, prev, labels):
         else:
             G.add_edge(start, end, label=1)
             cummulative_weights += 1
+        G.nodes[start]["nof_outedges"] += 1
 
     to_remove_edges = []
     for u, v, data in G.edges(data=True):
-        if data["label"] < (cummulative_weights * 0.01):
-            #print(str((u, v)))
+        if data["label"] < (cummulative_weights * 0.005):
             to_remove_edges.append((u, v))
-
     G.remove_edges_from(to_remove_edges)
 
     to_remove_nodes = nx.isolates(G)
     G.remove_nodes_from(list(to_remove_nodes))
 
-    pos = nx.spring_layout(G)
-    nx.draw(G, pos, with_labels=True)
-    labels = nx.get_edge_attributes(G, 'label')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
-    plt.show()
+    for u, v, data in G.edges(data=True):
+        data["label"] = round(float(data["label"]) / float(G.nodes[u]["nof_outedges"]), 3)
 
     nx.drawing.nx_pydot.write_dot(G, 'graph.dot')
 
@@ -68,7 +61,7 @@ if __name__ == "__main__":
     time = np.array(list(filter(lambda t: t, xls.get_column_with_name("Message Time"))))
 
     joint_data = []
-    for i, data in enumerate(zip(topic, bookclub, time, ctg_brd)):
+    for i, data in enumerate(zip(topic, bookclub, time, messages_gt)):
         if len(data[2].split(" ")) > 1:
             temp_date = data[2].split(" ")[0]
         else:
@@ -96,4 +89,4 @@ if __name__ == "__main__":
     #for x in data_cut:
     #    print(x)
 
-    get_sequences(data_cut, 2, set(ctg_brd))
+    get_sequences(data_cut, 3)
