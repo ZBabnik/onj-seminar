@@ -146,20 +146,64 @@ class GetType:
         return np.append(X, tmp.reshape(-1, 1), axis=1)
 
 
+class GetCategory:
+    """
+    predicts message Category and adds the value to the vector
+    """
+
+    def __init__(self, pipe):
+        self.pipe = pipe
+
+    def fit(self, X, y=None, **kwargs):
+        self.pipe.fit(X, kwargs["cat"])
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        tmp = np.array(list(map(lambda t: 0 if (t == "CG") else 1 if (t == "CB") else 2 if (t == "CE")
+            else 3 if (t == "CF") else 4 if (t == "CO") else 5 if (t == "CC")
+            else 6 if (t == "S") else 7 if (t == "DQ") else 8 if (t == "DE")
+            else 9 if (t == "DA") else 10 if (t == "DAA") else 11 if (t == "ME")
+            else 12 if (t == "MQ") else 13 if (t == "MA") else 14 if (t == "DAA")
+            else 15 if (t == "IQ") else 16 if (t == "IA") else 17 if (t == "IQA")
+            else 18, self.pipe.predict(X))), dtype=float)
+        return np.append(X, tmp.reshape(-1, 1), axis=1)
+
+
+class GetCategoryBroad:
+    """
+    predicts message CategoryBroad and adds the value to the vector
+    """
+
+    def __init__(self, pipe):
+        self.pipe = pipe
+
+    def fit(self, X, y=None, **kwargs):
+        self.pipe.fit(X, kwargs["ctb"])
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        tmp = np.array(list(map(lambda t: 0 if (t == "C") else 1 if (t == "O") else 2 if (t == "I")
+            else 3 if (t == "D") else 4, self.pipe.predict(X))), dtype=float)
+        return np.append(X, tmp.reshape(-1, 1), axis=1)
+
+
 if __name__ == "__main__":
     # read the data
     xls = ReadXls("data/AllDiscussionData.xls")
-    messages = np.array(xls.get_column_with_name("Message")).reshape(-1,1)
+    messages = np.array(xls.get_column_with_name("Message")).reshape(-1, 1)
     topic = np.array(list(map(lambda t: str(t).replace(" ", "")[::11], xls.get_column_with_name("Topic"
-                                                                                          )))).reshape(-1,1)
+                                                                                                )))).reshape(-1, 1)
     relevance = np.array(list(filter(lambda t: t, xls.get_column_with_name("Book relevance"))))  # ground truth
     type = np.array(list(filter(lambda t: t, xls.get_column_with_name("Type"))))  # ground truth
     messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
+    category = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))  # ground truth
+    category_broad = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
     X = np.append(messages, topic, axis=1)
 
     # split train / test
-    X_train, X_test, y_train, y_test, rel_train, rel_test, type_train, type_test\
-        = train_test_split(X, messages_gt, relevance, type, test_size=0.3, random_state=0)
+    X_train, X_test, category_train, category_test, relevance_train, relevance_test, type_train, type_test, \
+    category_broad_train, category_broad_test \
+        = train_test_split(X, category, relevance, type, category_broad, test_size=0.3, random_state=0)
 
     # params for gridsearchCV
     fit_params = {
@@ -204,16 +248,16 @@ if __name__ == "__main__":
     pipelines_dict = ["BOW", "wiki", "elmo2"]
     # fit and predict
     for i, pipeline in enumerate(pipelines):
-        pipeline.fit(X_train, y_train)
+        pipeline.fit(X_train, category_train)
         pred = pipeline.predict(X_test)
-        labels = list(set(y_test))
-        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(y_test, pred)))
+        labels = list(set(category_test))
+        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(category_test, pred)))
 
-        plt.plot(labels, f1_score(y_test, pred, average=None, labels=labels, zero_division=1), 'b-',
+        plt.plot(labels, f1_score(category_test, pred, average=None, labels=labels, zero_division=1), 'b-',
                  label="F1")
-        plt.plot(labels, precision_score(y_test, pred, average=None, labels=labels, zero_division=1), 'r-',
+        plt.plot(labels, precision_score(category_test, pred, average=None, labels=labels, zero_division=1), 'r-',
                  label="precision")
-        plt.plot(labels, recall_score(y_test, pred, average=None, labels=labels, zero_division=1), 'g-',
+        plt.plot(labels, recall_score(category_test, pred, average=None, labels=labels, zero_division=1), 'g-',
                  label="recall")
         plt.title("{} F1, precision, recall".format(pipelines_dict[i]))
         plt.xlabel("labels")
