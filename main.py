@@ -15,7 +15,7 @@ from sklearn.model_selection import GridSearchCV
 from functools import lru_cache
 from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-from imblearn.over_sampling import BorderlineSMOTE
+from imblearn.over_sampling import RandomOverSampler, SMOTE
 
 
 # preload all word vector models
@@ -194,12 +194,20 @@ class ResampleLR(LogisticRegression):
     wrapper so that estimator receives resampled values in fitting
     """
     def __init__(self, random_state=None):
-        self.sampler = BorderlineSMOTE(random_state=42, sampling_strategy='auto')
+        self.small_class_sampler = RandomOverSampler(random_state=42, sampling_strategy='minority')
+        self.sampler = SMOTE(random_state=42, sampling_strategy='auto')
         super().__init__(random_state=random_state)
 
     def fit(self, X, y=None, **kwargs):
         print("start sampling")
-        X, y = self.sampler.fit_resample(X, y)
+        while True:
+            try:
+                X, y = self.sampler.fit_resample(X, y)
+                break
+            except:
+                # if one class has less than 6 elements this happenes
+                print("small class resampling")
+                X, y = self.small_class_sampler.fit_resample(X, y)
         print("fin sampling")
         super().fit(X=X, y=y, **kwargs)
 
@@ -266,14 +274,13 @@ if __name__ == "__main__":
     pipelines_dict = ["BOW", "wiki", "elmo"]
     # fit and predict
     for i, pipeline in enumerate(pipelines):
-        pipeline.fit(X_train, y=category_broad_train, relevance__rel=relevance_train)
+        pipeline.fit(X_train, y=category_train, relevance__rel=relevance_train)
         pred = pipeline.predict(X_test)
-        labels = list(set(category_broad_test))
-        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(category_broad_test, pred)))
-        print(pred.shape, category_broad_test.shape)
-        f1 = f1_score(category_broad_test, pred, average=None, labels=labels, zero_division=1)
-        precision = precision_score(category_broad_test, pred, average=None, labels=labels, zero_division=0)
-        recall = recall_score(category_broad_test, pred, average=None, labels=labels, zero_division=0)
+        labels = list(set(category_test))
+        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(category_test, pred)))
+        f1 = f1_score(category_test, pred, average=None, labels=labels, zero_division=1)
+        precision = precision_score(category_test, pred, average=None, labels=labels, zero_division=0)
+        recall = recall_score(category_test, pred, average=None, labels=labels, zero_division=0)
         pack = sorted(zip(f1, recall, precision, labels), reverse=True)
         f1 = [i[0]*100 for i in pack]
         precision = [i[2]*100 for i in pack]
