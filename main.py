@@ -15,6 +15,8 @@ from sklearn.model_selection import GridSearchCV
 from functools import lru_cache
 from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from imblearn.over_sampling import BorderlineSMOTE
+
 
 # preload all word vector models
 models = {"embeddings/wiki.sl.magnitude": Magnitude("embeddings/wiki.sl.magnitude"),
@@ -44,10 +46,10 @@ class Tagg:
         # remove all non alphanumeric characters
         # no_non_alphanumeric_chars = map(lambda t: sub(r'[^a-zA-Z0-9]+', ' ', str(t)), X[:, 0])
         # if a letter is repeated 3 times its most likely to emphasize the text so its shortened to 1 repetition
-        #no_triple_chars = map(lambda t: sub(r'(\w)\1\1*', r'\1', str(t)), X[:, 0])
+        no_triple_chars = map(lambda t: sub(r'(\w)\1\1*', r'\1', str(t)), X[:, 0])
         # get lemmas change all lemmas to lower case
 
-        weighted_questions = map(lambda t: self.isQuestion(t.lower()),  X[:, 0])
+        weighted_questions = map(lambda t: self.isQuestion(t.lower()),  no_triple_chars)
 
         tokens = np.array(list(map(lambda t: np.array([list(map(lambda u: u.lower(), tokeniser(str(t)))),
                                         " ".join(list(map(lambda u: "a"+u[:2], self.lemmatizer.tagger(str(t))[1])))]),
@@ -187,6 +189,21 @@ class GetCategoryBroad:
         return np.append(X, tmp.reshape(-1, 1), axis=1)
 
 
+class ResampleLR(LogisticRegression):
+    """
+    wrapper so that estimator receives resampled values in fitting
+    """
+    def __init__(self, random_state=None):
+        self.sampler = BorderlineSMOTE(random_state=42, sampling_strategy='auto')
+        super().__init__(random_state=random_state)
+
+    def fit(self, X, y=None, **kwargs):
+        print("start sampling")
+        X, y = self.sampler.fit_resample(X, y)
+        print("fin sampling")
+        super().fit(X=X, y=y, **kwargs)
+
+
 if __name__ == "__main__":
     # read the data
     xls = ReadXls("data/AllDiscussionData.xls")
@@ -198,12 +215,13 @@ if __name__ == "__main__":
     messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
     category = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))  # ground truth
     category_broad = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
-    X = np.append(messages, topic, axis=1)
+    X = np.append(np.append(messages, topic, axis=1), relevance.reshape(-1,1), axis=1)
 
     # split train / test
     X_train, X_test, category_train, category_test, relevance_train, relevance_test, type_train, type_test, \
     category_broad_train, category_broad_test \
         = train_test_split(X, category, relevance, type, category_broad, test_size=0.3, random_state=0)
+
 
     # params for gridsearchCV
     fit_params = {
@@ -220,15 +238,15 @@ if __name__ == "__main__":
     pipeline_lr1 = Pipeline([('str', ToStr()),
                              ('BOW', CountVectorizer(ngram_range=(1,2))),
                              ('toArray', ToArray()),
-                             #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', LogisticRegression(random_state=0))])
+                             ('classify', ResampleLR(random_state=0))])
 
     pipeline_lr2 = Pipeline([('scalar1', Tagg(Tagger())),
                              ('word2vecW', WordEmbeddings("embeddings/wiki.sl.magnitude")),
-                             #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', LogisticRegression(random_state=0))])
+                             ('classify', ResampleLR(random_state=0))])
 
     # params for gridsearchCV for elmo WV
     fit_params = {
@@ -240,22 +258,22 @@ if __name__ == "__main__":
     }
     pipeline_lr3 = Pipeline([('scalar2', Tagg(Tagger())),
                              ('word2vecW', WordEmbeddings("embeddings/slovenian-elmo.weights.magnitude")),
-                             #('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
                              #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', LogisticRegression(random_state=0))])
+                             ('classify', ResampleLR(random_state=0))])
 
     pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
     pipelines_dict = ["BOW", "wiki", "elmo"]
     # fit and predict
     for i, pipeline in enumerate(pipelines):
-        pipeline.fit(X_train, category_train)
+        pipeline.fit(X_train, y=category_broad_train, relevance__rel=relevance_train)
         pred = pipeline.predict(X_test)
-        labels = list(set(category_test))
-        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(category_test, pred)))
-
-        f1 = f1_score(category_test, pred, average=None, labels=labels, zero_division=1)
-        precision = precision_score(category_test, pred, average=None, labels=labels, zero_division=1)
-        recall = recall_score(category_test, pred, average=None, labels=labels, zero_division=1)
+        labels = list(set(category_broad_test))
+        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(category_broad_test, pred)))
+        print(pred.shape, category_broad_test.shape)
+        f1 = f1_score(category_broad_test, pred, average=None, labels=labels, zero_division=1)
+        precision = precision_score(category_broad_test, pred, average=None, labels=labels, zero_division=0)
+        recall = recall_score(category_broad_test, pred, average=None, labels=labels, zero_division=0)
         pack = sorted(zip(f1, recall, precision, labels), reverse=True)
         f1 = [i[0]*100 for i in pack]
         precision = [i[2]*100 for i in pack]
