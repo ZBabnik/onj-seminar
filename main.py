@@ -68,7 +68,7 @@ class ToStr:
         return list(map(str, X))
 
 
-class ToArray(TransformerMixin, BaseEstimator):
+class ToArray:
     """
     converts BOW output to numpy array
     """
@@ -161,13 +161,12 @@ class GetCategory:
         return self
 
     def transform(self, X, y=None, **kwargs):
-        tmp = np.array(list(map(lambda t: 0 if (t == "CG") else 1 if (t == "CB") else 2 if (t == "CE")
-            else 3 if (t == "CF") else 4 if (t == "CO") else 5 if (t == "CC")
+        tmp = np.array(list(map(lambda t: 0 if (t == "CG") else 1 if (t == "CC") else 2 if (t == "CE")
+            else 3 if (t == "CF") else 4 if (t == "CO") else 5 if (t == "CB")
             else 6 if (t == "S") else 7 if (t == "DQ") else 8 if (t == "DE")
             else 9 if (t == "DA") else 10 if (t == "DAA") else 11 if (t == "ME")
-            else 12 if (t == "MQ") else 13 if (t == "MA") else 14 if (t == "DAA")
-            else 15 if (t == "IQ") else 16 if (t == "IA") else 17 if (t == "IQA")
-            else 18, self.pipe.predict(X))), dtype=float)
+            else 12 if (t == "MQ") else 13 if (t == "MA") else  15 if (t == "IQ")
+            else 16 if (t == "IA") else 17 if (t == "IQA") else 18, self.pipe.predict(X))), dtype=float)
         return np.append(X, tmp.reshape(-1, 1), axis=1)
 
 
@@ -193,23 +192,53 @@ class ResampleLR(LogisticRegression):
     """
     wrapper so that estimator receives resampled values in fitting
     """
-    def __init__(self, random_state=None):
+    def __init__(self, random_state=None, solver='lbfgs'):
+        # initiate over samplers
         self.small_class_sampler = RandomOverSampler(random_state=42, sampling_strategy='minority')
         self.sampler = SMOTE(random_state=42, sampling_strategy='auto')
-        super().__init__(random_state=random_state)
+        super().__init__(random_state=random_state, solver=solver)
 
     def fit(self, X, y=None, **kwargs):
+        # overwrite predictor so that it over samples first when fitting
         print("start sampling")
         while True:
             try:
                 X, y = self.sampler.fit_resample(X, y)
                 break
             except:
-                # if one class has less than 6 elements this happenes
+                # if one class has less than 6 elements this happenes we use random over sampler for that class
+                # since smote requires at least 6 different elements with same class
                 print("small class resampling")
                 X, y = self.small_class_sampler.fit_resample(X, y)
         print("fin sampling")
         super().fit(X=X, y=y, **kwargs)
+
+
+class JoinResampleAndNormal:
+        """
+        predicts message CategoryBroad and adds the value to the vector
+        """
+
+        def __init__(self, pipe1, pipe2):
+            self.pipe1 = pipe1
+            self.pipe2 = pipe2
+            self.precision1 = None
+            self.precision2 = None
+
+        def fit(self, X, y=None, **kwargs):
+            self.pipe1.fit(X, y, **kwargs)
+            self.pipe2.fit(X, y, **kwargs)
+            self.labels = self.pipe2.classes_
+            pred1 = self.pipe1.predict(X)
+            pred2 = self.pipe2.predict(X)
+            self.precision1 = np.sqrt(precision_score(y, pred1, average=None, labels=self.labels, zero_division=0))
+            self.precision2 = np.sqrt(precision_score(y, pred2, average=None, labels=self.labels, zero_division=0))
+            return self
+
+        def predict(self, X, y=None):
+            pred = self.pipe1.predict_proba(X) * self.precision1 + self.pipe2.predict_proba(X) * self.precision2
+            pred = np.apply_along_axis(lambda t: np.argmax(t), 1, pred).flatten()
+            return self.labels[pred]
 
 
 if __name__ == "__main__":
@@ -230,54 +259,60 @@ if __name__ == "__main__":
     category_broad_train, category_broad_test \
         = train_test_split(X, category, relevance, type, category_broad, test_size=0.3, random_state=0)
 
-
-    # params for gridsearchCV
-    fit_params = {
-        "classify__solver": ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga'],
-        "classify__class_weight": ['balanced', None],
-        "classify__penalty": ['l1', 'elasticnet', 'l2', 'none'],
-        "classify__l1_ratio": [0.5],
-        "classify__multi_class": ["ovr", "multinomial"],
-        "classify__max_iter": [500]
-    }
-
     # sklearn pipelines
+    pipeline_lr11 = Pipeline([('str', ToStr()),
+                              ('BOW', CountVectorizer(ngram_range=(1, 2))),
+                              ('toArray', ToArray()),
+                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                              ('classify', ResampleLR(random_state=0, solver='lbfgs'))])
 
-    pipeline_lr1 = Pipeline([('str', ToStr()),
-                             ('BOW', CountVectorizer(ngram_range=(1,2))),
-                             ('toArray', ToArray()),
-                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                             #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', ResampleLR(random_state=0))])
+    pipeline_lr12 = Pipeline([('str', ToStr()),
+                              ('BOW', CountVectorizer(ngram_range=(1, 2))),
+                              ('toArray', ToArray()),
+                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                              ('classify', LogisticRegression(random_state=0, solver='lbfgs'))])
 
-    pipeline_lr2 = Pipeline([('scalar1', Tagg(Tagger())),
-                             ('word2vecW', WordEmbeddings("embeddings/wiki.sl.magnitude")),
-                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                             #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', ResampleLR(random_state=0))])
+    pipeline_comb1 = JoinResampleAndNormal(pipeline_lr11, pipeline_lr12)
 
-    # params for gridsearchCV for elmo WV
-    fit_params = {
-        "classify__solver": ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga'],
-        "classify__class_weight": ['balanced', None],
-        "classify__penalty": ['l1', 'elasticnet', 'l2', 'none'],
-        "classify__l1_ratio": [0.5],
-        "classify__max_iter": [500]
-    }
-    pipeline_lr3 = Pipeline([('scalar2', Tagg(Tagger())),
+    pipeline_lr21 = Pipeline([('str', ToStr()),
+                              ('BOW', CountVectorizer(ngram_range=(1, 2))),
+                              ('toArray', ToArray()),
+                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                              ('classify', ResampleLR(random_state=0, solver='lbfgs'))])
+
+    pipeline_lr22 = Pipeline([('str', ToStr()),
+                              ('BOW', CountVectorizer(ngram_range=(1, 2))),
+                              ('toArray', ToArray()),
+                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                              ('classify', LogisticRegression(random_state=0, solver='lbfgs'))])
+
+    pipeline_comb2 = JoinResampleAndNormal(pipeline_lr21, pipeline_lr22)
+
+    pipeline_lr31 = Pipeline([('scalar1', Tagg(Tagger())),
                              ('word2vecW', WordEmbeddings("embeddings/slovenian-elmo.weights.magnitude")),
-                             ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                             #('type', GetType(pipe=LogisticRegression(random_state=0))),
-                             ('classify', ResampleLR(random_state=0))])
+                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                              ('classify', ResampleLR(random_state=0, solver='lbfgs'))])
 
-    pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
+    pipeline_lr32 = Pipeline([('scalar1', Tagg(Tagger())),
+                             ('word2vecW', WordEmbeddings("embeddings/slovenian-elmo.weights.magnitude")),
+                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
+                              ('classify', LogisticRegression(random_state=0, solver='lbfgs'))])
+
+    pipeline_comb3 = JoinResampleAndNormal(pipeline_lr11, pipeline_lr12)
+
+
+
+    pipelines = [pipeline_comb1, pipeline_comb2, pipeline_comb3]
     pipelines_dict = ["BOW", "wiki", "elmo"]
     # fit and predict
     for i, pipeline in enumerate(pipelines):
         pipeline.fit(X_train, y=category_train, relevance__rel=relevance_train)
         pred = pipeline.predict(X_test)
-        labels = list(set(category_test))
+        labels = sorted(list(set(category_train)))
         print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(category_test, pred)))
+        print("{} Test F1 micro: {}".format(pipelines_dict[i], f1_score(category_test, pred, average="micro")))
+        print("{} Test F1 macro: {}".format(pipelines_dict[i], f1_score(category_test, pred, average="macro")))
+        print("{} Test F1 weighted: {}".format(pipelines_dict[i], f1_score(category_test, pred, average="weighted")))
         f1 = f1_score(category_test, pred, average=None, labels=labels, zero_division=1)
         precision = precision_score(category_test, pred, average=None, labels=labels, zero_division=0)
         recall = recall_score(category_test, pred, average=None, labels=labels, zero_division=0)
