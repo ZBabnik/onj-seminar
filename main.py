@@ -16,6 +16,7 @@ from functools import lru_cache
 from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from imblearn.over_sampling import RandomOverSampler, SMOTE
+import re
 
 
 # preload all word vector models
@@ -64,8 +65,13 @@ class ToStr:
     def fit(self, X, y=None, **kwargs):
         return self
 
+    def addToGibberish(self, sentence):
+        if predictGibberishWords(sentence[0]) == -1:
+            sentence[0] = sentence[0] + "gibberish"
+        return sentence
+
     def transform(self, X, y=None, *args, **kwargs):
-        return list(map(str, X))
+        return list(str(self.addToGibberish(t)) for t in X)
 
 
 class ToArray(TransformerMixin, BaseEstimator):
@@ -130,6 +136,33 @@ class GetRelevance:
         tmp = np.array(list(map(lambda t: 1 if (t == "Yes") else -1, self.pipe.predict(X))), dtype=float)
         return np.append(X, tmp.reshape(-1, 1), axis=1)
 
+
+class GetGibberish:
+    """
+    predicts gibberish words and adds the value to the vector
+    """
+    def __init__(self, pipe):
+        self.pipe = pipe
+
+    def fit(self, X, y=None, **kwargs):
+        self.pipe.fit(X, kwargs["gib"])
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        tmp = np.array(list(self.pipe.predict(X)), dtype=float)
+        return np.append(X, tmp.reshape(-1, 1), axis=1)
+
+def predictGibberishWords(sentence):
+    sentence = sentence.replace(".", "").replace("!", "").replace("?", "").replace(",", " ")
+    if len(sentence) < 2:
+        return -1
+    for i, word in enumerate(sentence.split()):
+        if len(word) > 15 or re.search(r'(.)\1\1', word) \
+                or re.search(r'[^\w\s,]', word) and i == 0 \
+                or any(i.isdigit() for i in word) and not all(i.isdigit() for i in word) and not word[-1].isdigit():
+        # if longer than 15 char or sole letter repeats pr has digit in a word, but not in the last place (usernames)
+            return -1
+    return 1
 
 class GetType:
     """
@@ -224,11 +257,12 @@ if __name__ == "__main__":
     category = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))  # ground truth
     category_broad = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
     X = np.append(np.append(messages, topic, axis=1), relevance.reshape(-1,1), axis=1)
+    n = list(predictGibberishWords(s[0]) for s in messages)
 
     # split train / test
     X_train, X_test, category_train, category_test, relevance_train, relevance_test, type_train, type_test, \
-    category_broad_train, category_broad_test \
-        = train_test_split(X, category, relevance, type, category_broad, test_size=0.3, random_state=0)
+    category_broad_train, category_broad_test, gibberish_train, gibberish_test \
+        = train_test_split(X, category, relevance, type, category_broad, n, test_size=0.3, random_state=0)
 
 
     # params for gridsearchCV
@@ -247,7 +281,8 @@ if __name__ == "__main__":
                              ('BOW', CountVectorizer(ngram_range=(1,2))),
                              ('toArray', ToArray()),
                              ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                             #('type', GetType(pipe=LogisticRegression(random_state=0))),
+                             ('gibberish', GetGibberish(pipe=LogisticRegression(random_state=0))),
+                             # ('type', GetType(pipe=LogisticRegression(random_state=0))),
                              ('classify', ResampleLR(random_state=0))])
 
     pipeline_lr2 = Pipeline([('scalar1', Tagg(Tagger())),
@@ -273,14 +308,16 @@ if __name__ == "__main__":
     pipelines = [pipeline_lr1, pipeline_lr2, pipeline_lr3]
     pipelines_dict = ["BOW", "wiki", "elmo"]
     # fit and predict
+    train = category_broad_train
+    test = category_broad_test
     for i, pipeline in enumerate(pipelines):
-        pipeline.fit(X_train, y=category_train, relevance__rel=relevance_train)
+        pipeline.fit(X_train, y=train, relevance__rel=relevance_train, gibberish__gib=gibberish_train)
         pred = pipeline.predict(X_test)
-        labels = list(set(category_test))
-        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(category_test, pred)))
-        f1 = f1_score(category_test, pred, average=None, labels=labels, zero_division=1)
-        precision = precision_score(category_test, pred, average=None, labels=labels, zero_division=0)
-        recall = recall_score(category_test, pred, average=None, labels=labels, zero_division=0)
+        labels = list(set(test))
+        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(test, pred)))
+        f1 = f1_score(test, pred, average=None, labels=labels, zero_division=1)
+        precision = precision_score(test, pred, average=None, labels=labels, zero_division=0)
+        recall = recall_score(test, pred, average=None, labels=labels, zero_division=0)
         pack = sorted(zip(f1, recall, precision, labels), reverse=True)
         f1 = [i[0]*100 for i in pack]
         precision = [i[2]*100 for i in pack]
