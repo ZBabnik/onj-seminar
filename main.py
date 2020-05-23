@@ -38,9 +38,6 @@ class Tagg:
         for word in ["kdo", "kje", "kaj", "kdaj", "zakaj", "kako", "?", "ali"]:
             if word in sentence:
                 return (word + " ") * 5 + sentence
-        # for word in sentence.split():
-          #  if len(word) > 15:
-           #     return "klnlcknlakncklankankasncsincsncklnskncknsaklsnklsnklsnklsnklskankslsanksn"
         return sentence
 
     def transform(self, X, y=None, *args, **kwargs):
@@ -48,7 +45,6 @@ class Tagg:
         # no_non_alphanumeric_chars = map(lambda t: sub(r'[^a-zA-Z0-9]+', ' ', str(t)), X[:, 0])
         # if a letter is repeated 3 times its most likely to emphasize the text so its shortened to 1 repetition
         no_triple_chars = map(lambda t: sub(r'(\w)\1\1*', r'\1', str(t)), X[:, 0])
-        # get lemmas change all lemmas to lower case
 
         weighted_questions = map(lambda t: self.isQuestion(t.lower()),  no_triple_chars)
 
@@ -276,26 +272,23 @@ class JoinResampleAndNormal:
             return self.labels[pred]
 
 
-if __name__ == "__main__":
-    # read the data
+def read_data():
     xls = ReadXls("data/AllDiscussionData.xls")
     messages = np.array(xls.get_column_with_name("Message")).reshape(-1, 1)
     topic = np.array(list(map(lambda t: str(t).replace(" ", "")[::11], xls.get_column_with_name("Topic"
                                                                                                 )))).reshape(-1, 1)
     relevance = np.array(list(filter(lambda t: t, xls.get_column_with_name("Book relevance"))))  # ground truth
     type = np.array(list(filter(lambda t: t, xls.get_column_with_name("Type"))))  # ground truth
-    messages_gt = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
     category = np.array(list(filter(lambda t: t, xls.get_column_with_name("Category"))))  # ground truth
     category_broad = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
-    X = np.append(np.append(messages, topic, axis=1), relevance.reshape(-1,1), axis=1)
-    n = list(predictGibberishWords(s[0]) for s in messages)
+    gibberish = np.array(list(predictGibberishWords(s[0]) for s in messages))
 
-    # split train / test
-    X_train, X_test, category_train, category_test, relevance_train, relevance_test, type_train, type_test, \
-    category_broad_train, category_broad_test, gibberish_train, gibberish_test \
-        = train_test_split(X, category, relevance, type, category_broad, n, test_size=0.3, random_state=0)
+    X = np.append(np.append(messages, topic, axis=1), relevance.reshape(-1, 1), axis=1)
 
-    # sklearn pipelines
+    return X, relevance, type, category, category_broad, gibberish
+
+
+def get_all_pipelines():
     pipeline_lr11 = Pipeline([('str', ToStr()),
                               ('BOW', CountVectorizer(ngram_range=(1, 2))),
                               ('toArray', ToArray()),
@@ -340,37 +333,63 @@ if __name__ == "__main__":
 
     pipeline_comb3 = JoinResampleAndNormal(pipeline_lr31, pipeline_lr32)
 
-    pipelines = [pipeline_comb1, pipeline_comb2, pipeline_comb3]
-    pipelines_dict = ["BOW", "wiki", "elmo"]
+    return [(pipeline_comb1, "BOW"), (pipeline_comb2, "Wiki"), (pipeline_comb3, "Elmo")]
+
+
+def show_plot(f1, precision, recall, labels, pipeline_name):
+    plt.plot(labels, f1, 'b-', label="F1")
+    plt.plot(labels, precision, 'r-',
+             label="precision")
+    plt.plot(labels, recall, 'g-',
+             label="recall")
+    plt.xticks(rotation=90)
+    plt.title("{} F1, precision, recall".format(pipeline_name))
+    plt.xlabel("labels")
+    plt.gcf().subplots_adjust(bottom=0.15)
+    plt.ylabel("%")
+    plt.legend()
+    plt.show()
+
+
+def evaluate(pipeline_name, test, pred):
+    labels = list(set(test))
+    print("{} Test Accuracy: {}".format(pipeline_name, accuracy_score(test, pred)))
+    print("{} Test F1 micro: {}".format(pipeline_name, f1_score(test, pred, average="micro")))
+    print("{} Test F1 macro: {}".format(pipeline_name, f1_score(test, pred, average="macro")))
+    print("{} Test F1 weighted: {}".format(pipeline_name, f1_score(test, pred, average="weighted")))
+
+    f1 = f1_score(test, pred, average=None, labels=labels, zero_division=1)
+    precision = precision_score(test, pred, average=None, labels=labels, zero_division=0)
+    recall = recall_score(test, pred, average=None, labels=labels, zero_division=0)
+
+    pack = sorted(zip(f1, recall, precision, labels), reverse=True)
+    f1 = [i[0] * 100 for i in pack]
+    precision = [i[2] * 100 for i in pack]
+    recall = [i[1] * 100 for i in pack]
+    labels = [i[3] for i in pack]
+
+    return f1, precision, recall, labels
+
+
+if __name__ == "__main__":
+    # read the data
+    X, relevance, type, category, category_broad, gibberish = read_data()
+
+    # split train / test
+    X_train, X_test, category_train, category_test, relevance_train, relevance_test, type_train, type_test, \
+        category_broad_train, category_broad_test, gibberish_train, gibberish_test \
+            = train_test_split(X, category, relevance, type, category_broad, gibberish, test_size=0.3, random_state=0)
+
+    # sklearn pipelines
+    pipelines = get_all_pipelines()
+
     # fit and predict
     train = category_train
     test = category_test
-    for i, pipeline in enumerate(pipelines):
-        pipeline.fit(X_train, y=train, relevance__rel=relevance_train, gibberish__gib = gibberish_train)
+    for pipeline, pipeline_name in pipelines:
+        pipeline.fit(X_train, y=train, relevance__rel=relevance_train, gibberish__gib=gibberish_train)
         pred = pipeline.predict(X_test)
-        labels = list(set(test))
-        print("{} Test Accuracy: {}".format(pipelines_dict[i], accuracy_score(test, pred)))
-        print("{} Test F1 micro: {}".format(pipelines_dict[i], f1_score(test, pred, average="micro")))
-        print("{} Test F1 macro: {}".format(pipelines_dict[i], f1_score(test, pred, average="macro")))
-        print("{} Test F1 weighted: {}".format(pipelines_dict[i], f1_score(test, pred, average="weighted")))
-        f1 = f1_score(test, pred, average=None, labels=labels, zero_division=1)
-        precision = precision_score(test, pred, average=None, labels=labels, zero_division=0)
-        recall = recall_score(test, pred, average=None, labels=labels, zero_division=0)
 
-        pack = sorted(zip(f1, recall, precision, labels), reverse=True)
-        f1 = [i[0]*100 for i in pack]
-        precision = [i[2]*100 for i in pack]
-        recall = [i[1]*100 for i in pack]
-        labels = [i[3] for i in pack]
-        plt.plot(labels, f1, 'b-',label="F1")
-        plt.plot(labels, precision, 'r-',
-                 label="precision")
-        plt.plot(labels, recall, 'g-',
-                 label="recall")
-        plt.xticks(rotation=90)
-        plt.title("{} F1, precision, recall".format(pipelines_dict[i]))
-        plt.xlabel("labels")
-        plt.gcf().subplots_adjust(bottom=0.15)
-        plt.ylabel("%")
-        plt.legend()
-        plt.show()
+        f1, precision, recall, labels = evaluate(pipeline_name, test, pred)
+
+        show_plot(f1, precision, recall, labels, pipeline_name)
