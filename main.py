@@ -307,7 +307,7 @@ def read_data():
     category_broad = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
     gibberish = np.array(list(predictGibberishWords(s[0]) for s in messages))
 
-    X = np.append(np.append(messages, topic, axis=1), relevance.reshape(-1, 1), axis=1)
+    X = np.append(messages, topic, axis=1)
 
     return X, relevance, type, category, category_broad, gibberish
 
