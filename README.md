@@ -1,24 +1,35 @@
-# onj-seminar Text classification
+# IMapBook Text Classification repository
 
-## Report location
+Welcome to the IMapBook text classification repository, made as an assignment
+at the __Natural Language Processing__ course at the Faculty of Computer and
+Information Science, University of Ljubljana. 
 
-Report preview for the first submission is in the main folder 
-with the name report_preview.pdf
+The project was developed by Žiga Babnik, Miha Štravs and Kristian Šenk.
 
-## Set up 
+### Report location
 
-file requirements.txt holds all packages.
+The report presenting our approach and findings is located in the main folder
+under the name report.pdf
 
-pip install -r requirements.txt
+### Set up 
 
-if you are having problems with torch installation use
- [conda environment.](https://docs.conda.io/en/latest/miniconda.html)
+The repository was developed using [Conda](https://docs.conda.io/en/latest/miniconda.html)
+ and Python 3.7. To set up working code perform the following steps:
+  - create a new Conda Python 3.7 environment 
+  - install all the required packages contained in the requirements.txt file
+  by running 
+    - **pip install -r requirements.txt** 
+  - dowload the [word vector embeddings](https://drive.google.com/drive/folders/1nc0FovOn5pqEVjjmW_Swikc66Nel1i6j?usp=sharing)
+  - place the word vector embeddings into the **./embeddings** folder
+
+
+### Running the code
  
- Download [word vector embeddings](https://drive.google.com/drive/folders/1nc0FovOn5pqEVjjmW_Swikc66Nel1i6j?usp=sharing)
- and put them into the embeddings folder.
+ Running the main.py script will perform classification and output the results.
+ The script is controlled by two variables:
  
- ### Testing
+ - variable predicting (line 411) holds which target variable will be used for prediction
+ - variable classifier (line 412) holds which classification model will be used
  
- To run predictor testing there are two parameters in a form of a string that need to be set up.
-On line 411 predicting holds the string which holds the data that the model will predict and on line 412 classifier
-gives an option between logistic regression and neural network.
+ All possible values for both variables are listed in the comments 
+
