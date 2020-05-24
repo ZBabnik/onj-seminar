@@ -11,9 +11,7 @@ import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import GridSearchCV
 from functools import lru_cache
-from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from imblearn.over_sampling import RandomOverSampler, SMOTE
 import re
@@ -245,6 +243,32 @@ class ResampleLR(LogisticRegression):
         super().fit(X=X, y=y, **kwargs)
 
 
+class ResampleMLP(MLPClassifier):
+    """
+    wrapper so that estimator receives resampled values in fitting
+    """
+    def __init__(self, hidden_layer_sizes=(100)):
+        # initiate over samplers
+        self.small_class_sampler = RandomOverSampler(random_state=42, sampling_strategy='minority')
+        self.sampler = SMOTE(random_state=42, sampling_strategy='auto')
+        super().__init__(hidden_layer_sizes=hidden_layer_sizes)
+
+    def fit(self, X, y=None, **kwargs):
+        # overwrite predictor so that it over samples first when fitting
+        print("start sampling")
+        while True:
+            try:
+                X, y = self.sampler.fit_resample(X, y)
+                break
+            except:
+                # if one class has less than 6 elements this happenes we use random over sampler for that class
+                # since smote requires at least 6 different elements with same class
+                print("small class resampling")
+                X, y = self.small_class_sampler.fit_resample(X, y)
+        print("fin sampling")
+        super().fit(X=X, y=y, **kwargs)
+
+
 class JoinResampleAndNormal:
         """
         predicts message CategoryBroad and adds the value to the vector
@@ -283,25 +307,29 @@ def read_data():
     category_broad = np.array(list(filter(lambda t: t, xls.get_column_with_name("CategoryBroad"))))
     gibberish = np.array(list(predictGibberishWords(s[0]) for s in messages))
 
-    X = np.append(np.append(messages, topic, axis=1), relevance.reshape(-1, 1), axis=1)
+    X = np.append(messages, topic, axis=1)
 
     return X, relevance, type, category, category_broad, gibberish
 
 
-def get_all_pipelines():
+def get_all_pipelines(normal_model, resample_model, predicting_relevance):
     pipeline_lr11 = Pipeline([('str', ToStr()),
                               ('BOW', CountVectorizer(ngram_range=(1, 2))),
                               ('toArray', ToArray()),
                               ('gibberish', GetGibberish(pipe=LogisticRegression(random_state=0))),
                               ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                              ('classify', ResampleLR(random_state=0, solver='lbfgs'))])
+                              normal_model])
 
     pipeline_lr12 = Pipeline([('str', ToStr()),
                               ('BOW', CountVectorizer(ngram_range=(1, 2))),
                               ('toArray', ToArray()),
                               ('gibberish', GetGibberish(pipe=LogisticRegression(random_state=0))),
                               ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                              ('classify', LogisticRegression(random_state=0, solver='lbfgs'))])
+                              resample_model])
+
+    if predicting_relevance:
+        pipeline_lr11.steps.pop(4)
+        pipeline_lr12.steps.pop(4)
 
     pipeline_comb1 = JoinResampleAndNormal(pipeline_lr11, pipeline_lr12)
 
@@ -309,13 +337,17 @@ def get_all_pipelines():
                               ('word2vecW', WordEmbeddings("embeddings/wiki.sl.magnitude")),
                               ('gibberish', GetGibberish(pipe=LogisticRegression(random_state=0))),
                               ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                              ('classify', ResampleLR(random_state=0, solver='lbfgs'))])
+                              normal_model])
 
     pipeline_lr22 = Pipeline([('scalar1', Tagg(Tagger())),
                               ('word2vecW', WordEmbeddings("embeddings/wiki.sl.magnitude")),
                               ('gibberish', GetGibberish(pipe=LogisticRegression(random_state=0))),
                               ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                              ('classify', LogisticRegression(random_state=0, solver='lbfgs'))])
+                              resample_model])
+
+    if predicting_relevance:
+        pipeline_lr21.steps.pop(3)
+        pipeline_lr22.steps.pop(3)
 
     pipeline_comb2 = JoinResampleAndNormal(pipeline_lr21, pipeline_lr22)
 
@@ -323,13 +355,17 @@ def get_all_pipelines():
                               ('word2vecW', WordEmbeddings("embeddings/slovenian-elmo.weights.magnitude")),
                               ('gibberish', GetGibberish(pipe=LogisticRegression(random_state=0))),
                               ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                              ('classify', LogisticRegression(random_state=0, solver='lbfgs'))])
+                              normal_model])
 
     pipeline_lr32 = Pipeline([('scalar1', Tagg(Tagger())),
                               ('word2vecW', WordEmbeddings("embeddings/slovenian-elmo.weights.magnitude")),
                               ('gibberish', GetGibberish(pipe=LogisticRegression(random_state=0))),
                               ('relevance', GetRelevance(pipe=LogisticRegression(random_state=0))),
-                              ('classify', ResampleLR(random_state=0, solver='lbfgs'))])
+                              resample_model])
+
+    if predicting_relevance:
+        pipeline_lr31.steps.pop(3)
+        pipeline_lr32.steps.pop(3)
 
     pipeline_comb3 = JoinResampleAndNormal(pipeline_lr31, pipeline_lr32)
 
@@ -372,6 +408,8 @@ def evaluate(pipeline_name, test, pred):
 
 
 if __name__ == "__main__":
+    predicting = "relevance"  # options relevance type category category_broad
+    classifier = "MLP"  # options MLP (neural_network) logistic_regression
     # read the data
     X, relevance, type, category, category_broad, gibberish = read_data()
 
@@ -381,13 +419,34 @@ if __name__ == "__main__":
             = train_test_split(X, category, relevance, type, category_broad, gibberish, test_size=0.3, random_state=0)
 
     # sklearn pipelines
-    pipelines = get_all_pipelines()
+    if classifier == "logistic_regression":
+        resample_classifier = ('classify', ResampleLR(random_state=0, solver='lbfgs'))
+        normal_classifier = ('classify', LogisticRegression(random_state=0, solver='lbfgs'))
+    if classifier == "MLP":
+        resample_classifier = ('classify', MLPClassifier(hidden_layer_sizes=(100)))
+        normal_classifier = ('classify', ResampleMLP())
+
+    pipelines = get_all_pipelines(normal_classifier, resample_classifier, predicting_relevance=predicting=="relevance")
+
+    if predicting == "category":
+        train = category_train
+        test = category_test
+    elif predicting == "category_broad":
+        train = category_broad_train
+        test = category_broad_test
+    elif predicting == "relevance":
+        train = relevance_train
+        test = relevance_test
+    elif predicting == "type":
+        train = type_train
+        test = type_test
 
     # fit and predict
-    train = category_train
-    test = category_test
     for pipeline, pipeline_name in pipelines:
-        pipeline.fit(X_train, y=train, relevance__rel=relevance_train, gibberish__gib=gibberish_train)
+        if predicting == "relevance":
+            pipeline.fit(X_train, y=train, gibberish__gib=gibberish_train)
+        else:
+            pipeline.fit(X_train, y=train, relevance__rel=relevance_train, gibberish__gib=gibberish_train)
         pred = pipeline.predict(X_test)
 
         f1, precision, recall, labels = evaluate(pipeline_name, test, pred)
