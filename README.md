@@ -20,5 +20,5 @@ if you are having problems with torch installation use
  ### Testing
  
  To run predictor testing there are two parameters in a form of a string that need to be set up.
-On line 417 predicting holds the string which holds the data that the model will predict and on line 418 classifier
+On line 411 predicting holds the string which holds the data that the model will predict and on line 412 classifier
 gives an option between logistic regression and neural network.
